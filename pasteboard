@@ -1,4 +1,0 @@
-SELECT CustomerID id,
-                  LastName name
-           FROM "Lanco Customers"
-           WHERE LastName LIKE ?%
