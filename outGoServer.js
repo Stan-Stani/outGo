@@ -13,9 +13,9 @@ var fs = require('fs');
 const cors = require('cors');
 var http = require('http');
 var https = require('https');
-var privateKey  = fs.readFileSync('C:/Users/ISLAU/Coding/SQLite/sslcert/example.key');
+var privateKey  = fs.readFileSync(__dirname + '/sslcert/example.key');
 
-var certificate = fs.readFileSync('C:/Users/ISLAU/Coding/SQLite/sslcert/example.crt');
+var certificate = fs.readFileSync(__dirname + '/sslcert/example.crt');
 
 var credentials = {key: privateKey, cert: certificate};
 var express = require('express');
