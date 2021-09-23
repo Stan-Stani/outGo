@@ -310,7 +310,28 @@ app.post('/', function(req, res){
 
        break;
 
-     case 'finishLegacyCustomerImport':
+
+
+    case 'viewLegacyData':
+
+      var sql = `SELECT *
+           FROM legacyCustomers
+           WHERE customerId = ?;`;
+      var customerId = clientJSON.ID;
+
+      db.all(sql, [customerId], (err, rows) => {
+        if (err || rows.length > 1) {
+          console.error(err.message)
+        }
+        console.log(rows[0]);
+        res.send(rows[0])
+
+      })
+
+
+      break;
+
+    case 'finishLegacyCustomerImport':
 
 
 
