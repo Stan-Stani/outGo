@@ -1,0 +1,1529 @@
+/*
+TODO:
+* create warning making sure the user checks the fields to be imported from legacyCustomer and corrects any arrows,
+perhaps with arrows by really important / likely to be wrong fields like mobile number, state, line 2 of address, middle name AND prompting them to look at paper file for other information if necessary as the legacy customer info is probably out of date anyways. Maybe change it to require user to confirm each field is correct via a check box before the save / submit button will work.
+* add logic to node for updating customer after submitting from customerEditView
+* scheduleWorkOrderView, manageWorkOrdersView, editWorkOrderView
+* make deletes of converted legacy customers' first note impossible on client and server side
+* address issue of client spamming sqlite server if the query takes too long to complete (and thus too long for server to respond so client sends message again)
+* Switch to github and remove sensitive gCal dependencies from github
+*/
+
+// let googleInterface = setUpGoogleInterface();
+
+function setUpGoogleInterface() {
+    // Client ID and API key from the Developer Console
+    var CLIENT_ID =
+        "configMe";
+    var API_KEY = "configMe";
+
+    // Array of API discovery doc URLs for APIs used by the quickstart
+    var DISCOVERY_DOCS = [
+        "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"
+    ];
+
+    // Authorization scopes required by the API; multiple scopes can be
+    // included, separated by spaces.
+    var SCOPES =
+        "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.app.created";
+
+    var authorizeButton = document.getElementById("authorize_button");
+    var signoutButton = document.getElementById("signout_button");
+
+    /**
+     *  On load, called to load the auth2 library and API client library.
+     */
+
+    handleClientLoad();
+    function handleClientLoad() {
+        gapi.load("client:auth2", initClient);
+    }
+
+    /**
+     *  Initializes the API client library and sets up sign-in state
+     *  listeners.
+     */
+    function initClient() {
+        gapi.client
+            .init({
+                apiKey: API_KEY,
+                clientId: CLIENT_ID,
+                discoveryDocs: DISCOVERY_DOCS,
+                scope: SCOPES
+            })
+            .then(
+                function () {
+                    // Listen for sign-in state changes.
+                    gapi.auth2
+                        .getAuthInstance()
+                        .isSignedIn.listen(updateSigninStatus);
+
+                    // Handle the initial sign-in state.
+                    updateSigninStatus(
+                        gapi.auth2.getAuthInstance().isSignedIn.get()
+                    );
+                    authorizeButton.onclick = handleAuthClick;
+                    signoutButton.onclick = handleSignoutClick;
+                },
+                function (error) {
+                    appendPre(JSON.stringify(error, null, 2));
+                }
+            );
+    }
+
+    /**
+     *  Called when the signed in status changes, to update the UI
+     *  appropriately. After a sign-in, the API is called.
+     */
+    function updateSigninStatus(isSignedIn) {
+        if (isSignedIn) {
+            authorizeButton.style.display = "none";
+            signoutButton.style.display = "block";
+        } else {
+            authorizeButton.style.display = "block";
+            signoutButton.style.display = "none";
+        }
+    }
+
+    /**
+     *  Sign in the user upon button click.
+     */
+    function handleAuthClick(event) {
+        gapi.auth2.getAuthInstance().signIn();
+    }
+
+    /**
+     *  Sign out the user upon button click.
+     */
+    function handleSignoutClick(event) {
+        gapi.auth2.getAuthInstance().signOut();
+    }
+
+    /**
+     * Append a pre element to the body containing the given message
+     * as its text node. Used to display the results of the API call.
+     *
+     * @param {string} message Text to be placed in pre element.
+     */
+    function appendPre(message) {
+        var pre = document.getElementById("content");
+        var textContent = document.createTextNode(message + "\n");
+        pre.appendChild(textContent);
+    }
+
+    /**
+     * Print the summary and start datetime/date of the next ten events in
+     * the authorized user's calendar. If no events are found an
+     * appropriate message is printed.
+     */
+
+    function listUserCalendars() {
+        gapi.client.calendar.calendarList.list().then(function (response) {
+            console.log(response);
+        });
+    }
+
+    function addTestEvent() {
+        var event = {
+            summary: "Google I/O 2015",
+            location: "800 Howard St., San Francisco, CA 94103",
+            description:
+                "A chance to hear more about Google's developer products.",
+            start: {
+                dateTime: "2021-08-28T09:00:00",
+                timeZone: "America/Chicago"
+            },
+            end: {
+                dateTime: "2021-08-28T17:00:00",
+                timeZone: "America/Chicago"
+            }
+        };
+
+        gapi.client.calendar.events
+            .insert({
+                calendarId:
+                    "configMe",
+                resource: event
+            })
+            .then(function (response) {
+                console.log(response);
+            });
+    }
+
+    function addEvent(event) {
+        return gapi.client.calendar.events
+            .insert({
+                calendarId:
+                    "configMe",
+                resource: event
+            })
+            .then(function (response) {
+                return response;
+            });
+    }
+
+    function createCalendar() {
+        gapi.client.calendar.calendars
+            .insert({ summary: "LancoSchedulerSandbox" })
+            .then(function (response) {
+                console.log(response);
+            });
+    }
+
+    return { addEvent: addEvent };
+}
+
+// Start of React stuff.
+
+let scheduleObj = {
+    techs: ["Larry", "Truston"],
+    metadata: {
+        creator: "Sherri",
+        creationDate: new Date(2021, 11, 2)
+    },
+    apptDate: new Date(2021, 11, 5),
+    time: {
+        hour: 9,
+        minute: 30
+    },
+    customer: "Chanute Public Library",
+    address: "111 N Lincoln Ave, Chanute, KS 66720",
+    phone: "620-431-3820",
+    email: "publiclibrary@chanute.org"
+};
+class Outgo extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            displaying: 'SearchCustomersView',
+            searchCustomersView: {
+                input: {
+                    appointmentDate: "",
+                    appointmentTime: "",
+                    customerFirstName: "",
+                    customerMiddleName: "",
+                    customerLastName: "",
+                    address: "",
+                    phoneNumber: "",
+                    email: "",
+                    technicians: "",
+                    issue: "",
+                    notes: ""
+                },
+                dropDownOptions: { firstName: [], lastName: [] }
+            },
+            searchResultsView: {
+                customerSearchResults: {}
+            },
+            scheduleServiceCallView: {
+                input: {}
+            },
+            legacyCustomerImportView: {
+                customerId: "",
+                input: {
+                    customerFirstName: "",
+                    customerMiddleName: "",
+                    customerLastName: "",
+                    billingAddressLine1: "",
+                    billingAddressLine2: "",
+                    city: "",
+                    state: "",
+                    zipCode: "",
+                    mobilePhone: "",
+                    workPhone: "",
+                    otherPhone: "",
+                    email: ""
+                }
+            },
+            legacyDataView: {},
+            customerEditView: {
+                customerId: "",
+                input: {
+                    customerFirstName: "",
+                    customerMiddleName: "",
+                    customerLastName: "",
+                    billingAddressLine1: "",
+                    billingAddressLine2: "",
+                    city: "",
+                    state: "",
+                    zipCode: "",
+                    mobilePhone: "",
+                    workPhone: "",
+                    otherPhone: "",
+                    email: ""
+                }
+            },
+            customerCreateView: {
+                input: {
+                    customerFirstName: "",
+                    customerMiddleName: "",
+                    customerLastName: "",
+                    billingAddressLine1: "",
+                    billingAddressLine2: "",
+                    city: "",
+                    state: "",
+                    zipCode: "",
+                    mobilePhone: "",
+                    workPhone: "",
+                    otherPhone: "",
+                    email: ""
+                }
+            },
+            customerNoteView: {
+                customerId: "",
+                noteArray: [],
+                input: {
+                    newNoteDraft: ""
+                }
+            },
+            formAlert: ""
+        };
+        this.handleChange = this.handleChange.bind(this);
+        this.dbRequest = this.dbRequest.bind(this);
+        this.handleSubmit = this.handleSubmit.bind(this);
+        this.dbRequest = this.dbRequest.bind(this);
+        this.buildNameDatalists = this.buildNameDatalists.bind(this);
+        this.formAlert = this.formAlert.bind(this);
+        this.viewNotes = this.viewNotes.bind(this);
+    }
+
+    formAlert(span) {
+        this.setState({ formAlert: span });
+        if (span) {
+            window.scrollTo(0, 0);
+        }
+    }
+    // sends reqObj to server and passes JSON response to callback
+    dbRequest(reqObj, callback) {
+        var req = new XMLHttpRequest();
+
+        req.addEventListener("load", (e) => {
+            let resObj = JSON.parse(req.response);
+            callback(resObj);
+        });
+        req.open("POST", "https://localhost:8443");
+        req.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        req.send(JSON.stringify(reqObj));
+    }
+    buildNameDatalists(resObj) {
+        let matchedFirstNameArr = [];
+        let matchedLastNameArr = [];
+        this.setState((state) => {
+            resObj.forEach((element, index, arr) => {
+                if (index === 0) {
+                    matchedFirstNameArr.push(<option value={element.firstName} />);
+                    matchedLastNameArr.push(<option value={element.lastName} />);
+                    // prevents duplicates being added to a given datalist
+                } else {
+
+                    if (arr[index].firstName !== arr[index - 1].firstName) {
+                        matchedFirstNameArr.push(<option value={element.firstName} />);
+                    }
+                    if (arr[index].lastName !== arr[index - 1].lastName) {
+                        matchedLastNameArr.push(<option value={element.lastName} />);
+                    }
+
+                }
+
+
+
+            });
+            let newObj = Object.assign({}, state);
+            newObj.searchCustomersView.dropDownOptions.firstName = matchedFirstNameArr;
+            newObj.searchCustomersView.dropDownOptions.lastName = matchedLastNameArr;
+            return(newObj);
+
+            }
+        );
+    }
+
+    handleChange(event) {
+        switch (event.target.name) {
+            case "appointment-date":
+                this.setState((state) => {
+                    let newObj = Object.assign({}, state);
+                    newObj.input.appointmentDate = event.target.value;
+                    return newObj;
+                });
+                break;
+            case "appointment-time":
+                this.setState((state) => {
+                    let newObj = Object.assign({}, state);
+                    newObj.input.appointmentTime = event.target.value;
+                    return newObj;
+                });
+                break;
+            case "customer-first-name":
+                this.setState((state) => {
+                    let newObj = Object.assign({}, state);
+                    newObj.input.customerFirstName = event.target.value;
+                    this.dbRequest(
+                        {
+                            reqID: "nameDatalistFill",
+                            customerFirstName: event.target.value,
+                            customerLastName: state.input.customerLastName
+                        },
+                        this.buildNameDatalists
+                    );
+                    return newObj;
+                });
+                break;
+            case "customer-last-name":
+                this.setState((state) => {
+                    let newObj = Object.assign({}, state);
+                    newObj.input.customerLastName = event.target.value;
+                    this.dbRequest(
+                        {
+                            reqID: "nameDatalistFill",
+                            customerLastName: event.target.value,
+                            customerFirstName: state.input.customerFirstName
+                        },
+                        this.buildNameDatalists
+                    );
+                    return newObj;
+                });
+                break;
+            case "address":
+                this.setState((state) => {
+                    let newObj = Object.assign({}, state);
+                    newObj.input.address = event.target.value;
+                    return newObj;
+                });
+                break;
+            case "phone-number":
+                this.setState((state) => {
+                    let newObj = Object.assign({}, state);
+                    newObj.input.phoneNumber = event.target.value;
+                    return newObj;
+                });
+                break;
+            case "email":
+                this.setState((state) => {
+                    let newObj = Object.assign({}, state);
+                    newObj.input.email = event.target.value;
+                    return newObj;
+                });
+                break;
+            case "technicians":
+                this.setState((state) => {
+                    let newObj = Object.assign({}, state);
+                    newObj.input.technicians = event.target.value;
+                    return newObj;
+                });
+                break;
+            case "issue":
+                this.setState((state) => {
+                    let newObj = Object.assign({}, state);
+                    newObj.input.issue = event.target.value;
+                    return newObj;
+                });
+                break;
+            case "notes":
+                this.setState((state) => {
+                    let newObj = Object.assign({}, state);
+                    newObj.input.notes = event.target.value;
+                    return newObj;
+                });
+                break;
+        }
+    }
+    convertUserInputsToEvent(inputs) {
+        let appointmentEndOffsetHours = 3;
+        let appointmentStartDateObj = temporalInputsToDateObj(
+            inputs.appointmentDate,
+            inputs.appointmentTime
+        );
+        var appointmentEndDateObj = temporalInputsToDateObj(
+            inputs.appointmentDate,
+            inputs.appointmentTime
+        );
+        appointmentEndDateObj.setUTCHours(
+            appointmentStartDateObj.getUTCHours() + appointmentEndOffsetHours
+        );
+        console.log(
+            appointmentStartDateObj.getUTCHours() + appointmentEndOffsetHours
+        );
+        console.log(appointmentEndDateObj);
+
+        let appointmentEndDateObjISOString = appointmentEndDateObj.toISOString();
+        let appointmentEndDateGAPIString = appointmentEndDateObjISOString.slice(
+            0,
+            -5
+        );
+        console.log(appointmentEndDateGAPIString);
+
+        let event = {
+            summary: inputs.customerFirstName + " " + inputs.customerLastName,
+            location: inputs.address,
+            description:
+                "Phone: " +
+                inputs.phoneNumber +
+                "\n\nEmail: " +
+                inputs.email +
+                "\n\nTechnicians: " +
+                inputs.technicians +
+                "\n\nIssue: " +
+                inputs.issue +
+                "\n\nNotes: " +
+                inputs.notes,
+            start: {
+                dateTime:
+                    inputs.appointmentDate +
+                    "T" +
+                    inputs.appointmentTime +
+                    ":00",
+                timeZone: "America/Chicago"
+            },
+            end: {
+                dateTime: appointmentEndDateGAPIString,
+                timeZone: "Etc/UTC"
+            }
+        };
+
+        return event;
+
+        function temporalInputsToDateObj(dateInput, timeInput) {
+            let year = dateInput.slice(0, 4);
+            let month = dateInput.slice(5, 7) - 1;
+            let day = dateInput.slice(8);
+            let hour = parseInt(timeInput.slice(0, 3));
+            let minute = parseInt(timeInput.slice(3));
+
+            return new Date(year, month, day, hour, minute);
+        }
+    }
+
+    handleSubmit() {
+        if (
+            this.state.input.appointmentDate &&
+            this.state.input.appointmentTime &&
+            this.state.input.customerFirstName &&
+            this.state.input.customerLastName &&
+            this.state.input.address &&
+            this.state.input.phoneNumber
+        ) {
+            this.formAlert();
+            let gcalEvent = this.convertUserInputsToEvent(this.state.input);
+
+            googleInterface.addEvent(gcalEvent).then((response) => {
+                if (response.status != 200) {
+                    this.formAlert(
+                        <span style={{ color: "red", fontWeight: "bold" }}>
+                            Gapi responded with status code: {response.status}.
+                            Please contact support and include the status code!
+                        </span>
+                    );
+                }
+            });
+        } else {
+            this.formAlert(
+                <span style={{ color: "red", fontWeight: "bold" }}>
+                    Please fill out the required fields.
+                </span>
+            );
+        }
+    }
+
+    viewNotes(customerId) {
+            this.dbRequest({
+                                reqID: "beginViewCustomerNotes",
+                                ID: customerId
+                            },
+                            (responseObj) => {
+                console.log(responseObj);
+                this.setState((state) => {  let newObj = Object.assign({}, state.customerNoteView);
+                    newObj.noteArray = responseObj;
+                    newObj.customerId = customerId;
+                    return({displaying: 'CustomerNoteView', customerNoteView: newObj})})
+            }
+                        );
+        }
+
+    render() {
+        let follower = <GoHome mainComponent={this} />;
+        switch(this.state.displaying) {
+            /*return (
+                <div>
+                            <label htmlFor="appointment-date">
+                                Appointment Date
+                            </label>
+                            <input
+                                onChange={props.mainComponent.handleChange}
+                                id="appointment-date"
+                                name="appointment-date"
+                                type="date"
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="appointment-time">
+                                Appointment Time
+                            </label>
+                            <input
+                                onChange={props.mainComponent.handleChange}
+                                id="appointment-time"
+                                name="appointment-time"
+                                type="time"
+                            />
+                        </div>
+                        <div>
+                 */
+
+
+            case 'SearchCustomersView':
+                return(<div id="center-panel"><SearchCustomersView mainComponent={this} />{follower}</div>)
+
+                break;
+
+
+            case 'SearchResultsView':
+
+                return(<div id='center-panel'><SearchResultsView mainComponent={this} searchResultsArr={this.state.searchResultsView.customerSearchResults}/>{follower}</div>);
+                break;
+
+            case 'LegacyCustomerImportView':
+                return(<div id='center-panel'><CustomerView mainComponent={this} viewObjName='legacyCustomerImportView'/>{follower}</div>)
+                break;
+
+            case 'LegacyDataView':
+                return(<div id='center-panel' style={{overflowWrap: 'anywhere', width: '80%'}}><div>{JSON.stringify(this.state.legacyDataView)}</div>{follower}</div>)
+
+            case 'CustomerEditView':
+                return(<div id='center-panel'><CustomerView mainComponent={this} viewObjName='customerEditView'/>{follower}</div>)
+                break;
+
+            case 'CustomerCreateView':
+                return(<div id='center-panel'><CustomerView mainComponent={this} viewObjName='customerCreateView'/>{follower}</div>)
+                break;
+
+            case 'CustomerNoteView':
+                return(<div><CustomerNoteView mainComponent={this} noteArr={this.state.customerNoteView.noteArray} />{follower}</div>)
+                break;
+
+
+        }
+    }
+}
+
+function GoHome(props) {
+
+    return(
+        <div style={{width: "90%"}}>
+            <hr />
+            <button
+                style={{lineHeight: "0"}}
+                type="button"
+                onClick={() => props.mainComponent.setState({displaying: 'SearchCustomersView'})}
+            >
+                <h4>Home</h4>
+            </button>
+        </div>
+    )
+
+}
+
+function SearchCustomersView(props) {
+
+
+    function handleChange(event) {
+        switch (event.target.name) {
+            case "customer-first-name":
+                props.mainComponent.setState((state) => {
+                    let newObj = Object.assign({}, state);
+                    newObj.searchCustomersView.input.customerFirstName = event.target.value;
+                    props.mainComponent.dbRequest(
+                        {
+                            reqID: "nameDatalistFill",
+                            customerFirstName: event.target.value,
+                            customerLastName: state.searchCustomersView.input.customerLastName
+                        },
+                        props.mainComponent.buildNameDatalists
+                    );
+                    return newObj;
+                });
+                break;
+            case "customer-last-name":
+                props.mainComponent.setState((state) => {
+                    let newObj = Object.assign({}, state);
+                    newObj.searchCustomersView.input.customerLastName = event.target.value;
+                    props.mainComponent.dbRequest(
+                        {
+                            reqID: "nameDatalistFill",
+                            customerLastName: event.target.value,
+                            customerFirstName: state.searchCustomersView.input.customerFirstName
+                        },
+                        props.mainComponent.buildNameDatalists
+                    );
+                    return newObj;
+                });
+                break;
+        }
+    }
+
+    function handleSearch() {
+        props.mainComponent.dbRequest(
+            {
+                reqID: "customerSearch",
+                customerFirstName: props.mainComponent.state.searchCustomersView.input.customerFirstName,
+                customerLastName: props.mainComponent.state.searchCustomersView.input.customerLastName
+            },
+            (responseObj) =>
+                // clearing out fields
+                props.mainComponent.setState((state) => {
+                    let newObj = Object.assign({}, state)
+                    for (const property in newObj.searchCustomersView.input) {
+                        newObj.searchCustomersView.input[property] = "";
+                    }
+                    for (const property in newObj.customerCreateView.input) {
+                        newObj.customerCreateView.input[property] = "";
+                    }
+                    newObj.searchCustomersView.input.customerFirstName = "";
+                    newObj.searchCustomersView.input.customerLastName = "";
+                    newObj.searchCustomersView.input.customerMiddleName = "";
+                    newObj.displaying = 'SearchResultsView';
+                    newObj.searchResultsView.customerSearchResults = responseObj;
+
+                    return(newObj);
+
+                })
+        );
+    }
+
+    return (
+        <div id="first-and-last-name-fields">
+            <div>
+                <label htmlFor="customer-first-name">First Name</label>
+
+                <input
+                    onChange={handleChange}
+                    id="customer-first-name"
+                    name="customer-first-name"
+                    list="first-name-list"
+                />
+                <datalist id="first-name-list">
+                    {props.mainComponent.state.searchCustomersView.dropDownOptions.firstName}
+                </datalist>
+            </div>
+
+            <div>
+                <label htmlFor="customer-last-name">Last Name</label>
+                <input
+                    onChange={handleChange}
+                    id="customer-last-name"
+                    name="customer-last-name"
+                    list="last-name-list"
+                />
+
+                <datalist id="last-name-list">
+                    {props.mainComponent.state.searchCustomersView.dropDownOptions.lastName}
+                </datalist>
+            </div>
+
+        <button
+            style={{
+                marginTop: "1.5em",
+                lineHeight: ".5em"
+            }}
+            type="button"
+            onClick={handleSearch}
+        >
+            <h4>Search</h4>
+        </button>
+    </div>
+    )
+
+
+}
+
+
+
+function SearchResultsView(props) {
+
+
+
+
+
+    return(
+        <div>
+            {props.searchResultsArr.map((element) => (
+                <SelectableCustomer customer={element} mainComponent={props.mainComponent} />
+            ))}
+
+            <button type="button" onClick={handleCreateClick} >
+                Create new customer
+            </button>
+        </div>
+    )
+
+
+
+
+    function handleCreateClick(event) {
+        props.mainComponent.setState({
+            displaying: 'CustomerCreateView',
+            customerCreateView:
+                {
+                    input: {
+                        customerFirstName: "",
+                        customerMiddleName: "",
+                        customerLastName: "",
+                        billingAddressLine1: "",
+                        billingAddressLine2: "",
+                        city: "",
+                        state: "",
+                        zipCode: "",
+                        mobilePhone: "",
+                        workPhone: "",
+                        otherPhone: "",
+                        email: ""
+                    }
+                }
+        }, () => console.log(props.mainComponent.state))
+
+    }
+
+}
+
+function SelectableCustomer(props) {
+
+
+    return(
+        <span>
+        {(props.customer.originTable == 'customers') ?
+                        <span className="space-between">
+                            <span>{props.customer.lastName}, {props.customer.firstName}, {props.customer.customerId}</span>
+                      <span>
+                          <button type="button" onClick={handleEditClick} >
+                            Edit
+                    </button>
+                    <button type="button" onClick={handleManageServiceCallsClick} >
+
+                            Manage Service Calls
+                    </button>
+                    <button type="button" onClick={handleNotesClick} >
+
+                            Notes
+                    </button>
+                            </span>
+                            </span>
+                      :
+                    <span className="space-between">
+                        <span><strong>LEGACY CUSTOMER</strong>: {props.customer.lastName}, {props.customer.firstName}, {props.customer.customerId}</span>
+                      <button type="button" onClick={handleImportClick} >
+                            Import
+                      </button>
+                      <button type="button" onClick={handleViewLegacyData}>
+                          View Legacy Data
+                      </button>
+                    </span>
+                    }
+        </span>
+    )
+
+
+    function handleImportClick(event) {
+
+        props.mainComponent.dbRequest({
+                            reqID: "beginLegacyCustomerImport",
+                            ID: props.customer.customerId
+                        },
+                        (responseObj) =>
+                props.mainComponent.setState((state) => {
+
+                    let newObj = Object.assign({}, state)
+                    newObj.displaying = 'LegacyCustomerImportView';
+                    newObj.legacyCustomerImportView.customerId = responseObj.customerId;
+                    newObj.legacyCustomerImportView.input.customerFirstName = responseObj.firstName;
+                    newObj.legacyCustomerImportView.input.customerMiddleName = responseObj.middleName;
+                    newObj.legacyCustomerImportView.input.customerLastName = responseObj.lastName;
+                    newObj.legacyCustomerImportView.input.billingAddressLine1 = responseObj.address;
+                    newObj.legacyCustomerImportView.input.city = responseObj.city;
+                    newObj.legacyCustomerImportView.input.state = responseObj.state.toUpperCase();
+                    newObj.legacyCustomerImportView.input.zipCode = responseObj.zipCode;
+                    newObj.legacyCustomerImportView.input.workPhone = responseObj.hisWorkPhone;
+                    newObj.legacyCustomerImportView.input.otherPhone = responseObj.herWorkPhone;
+                    newObj.legacyCustomerImportView.input.mobilePhone = responseObj.homePhone + " ?";
+                    newObj.legacyCustomerImportView.email = responseObj.email;
+                    return {
+                        displaying: 'LegacyCustomerImportView',
+                        customerSearchResults: responseObj
+                    };
+                })
+            );
+    }
+
+    function handleViewLegacyData(event) {
+         props.mainComponent.dbRequest({
+                            reqID: "viewLegacyData",
+                            ID: props.customer.customerId
+                        },
+                        (responseObj) =>
+                props.mainComponent.setState({legacyDataView: responseObj, displaying: 'LegacyDataView'})
+                                       )
+    }
+
+    function handleEditClick(event) {
+
+        props.mainComponent.dbRequest({
+                            reqID: "beginCustomerEdit",
+                            ID: props.customer.customerId
+                        },
+                        (responseObj) =>
+                props.mainComponent.setState((state) => {
+                    let viewObjName = 'customerEditView';
+                    let newObj = Object.assign({}, state)
+                    newObj.displaying = 'CustomerEditView';
+                    newObj[viewObjName].customerId = responseObj.customerId;
+                    newObj[viewObjName].input.customerFirstName = responseObj.firstName;
+                    newObj[viewObjName].input.customerMiddleName = responseObj.middleName;
+                    newObj[viewObjName].input.customerLastName = responseObj.lastName;
+                    newObj[viewObjName].input.billingAddressLine1 = responseObj.billingAddressLine1;
+                    newObj[viewObjName].input.billingAddressLine2 = responseObj.billingAddressLine2;
+                    newObj[viewObjName].input.city = responseObj.city;
+                    newObj[viewObjName].input.state = responseObj.state.toUpperCase();
+                    newObj[viewObjName].input.zipCode = responseObj.zipCode;
+                    newObj[viewObjName].input.workPhone = responseObj.workPhone;
+                    newObj[viewObjName].input.otherPhone = responseObj.otherPhone;
+                    newObj[viewObjName].input.mobilePhone = responseObj.mobilePhone;
+                    newObj[viewObjName].email = responseObj.email;
+                    return (newObj)
+                }, console.log(props.mainComponent.state))
+           );
+    }
+
+    function handleManageServiceCallsClick(event) {
+
+        props.mainComponent.dbRequest({
+                            reqID: "customerSelect",
+                            ID: props.customer.customerId
+                        },
+                        console.log
+                    );
+    }
+
+
+    function handleNotesClick(event) {
+        let customerId = props.customer.customerId;
+        props.mainComponent.viewNotes(customerId);
+
+    }
+
+
+
+
+
+}
+
+
+
+
+function CustomerView(props) {
+    let viewObjName = props.viewObjName;
+
+    function handleChange(event) {
+        switch (event.target.name) {
+        case "customer-first-name":
+            props.mainComponent.setState((state) => {
+                let newObj = Object.assign({}, state);
+                newObj[viewObjName].input.customerFirstName = event.target.value;
+                return newObj;
+            });
+            break;
+        case "customer-middle-name":
+            props.mainComponent.setState((state) => {
+                let newObj = Object.assign({}, state);
+                newObj[viewObjName].input.customerMiddleName = event.target.value;
+                return newObj;
+            });
+            break;
+        case "customer-last-name":
+            props.mainComponent.setState((state) => {
+                let newObj = Object.assign({}, state);
+                newObj[viewObjName].input.customerLastName = event.target.value;
+                return newObj;
+            });
+            break;
+        case "billing-address-line-1":
+            props.mainComponent.setState((state) => {
+                let newObj = Object.assign({}, state);
+                newObj[viewObjName].input.billingAddressLine1 = event.target.value;
+                return newObj;
+            });
+            break;
+        case "billing-address-line-2":
+            props.mainComponent.setState((state) => {
+                let newObj = Object.assign({}, state);
+                newObj[viewObjName].input.billingAddressLine2 = event.target.value;
+                return newObj;
+            });
+            break;
+         case "city":
+            props.mainComponent.setState((state) => {
+                let newObj = Object.assign({}, state);
+                newObj[viewObjName].input.city = event.target.value;
+                return newObj;
+            });
+            break;
+         case "state":
+            props.mainComponent.setState((state) => {
+                let newObj = Object.assign({}, state);
+                newObj[viewObjName].input.state = event.target.value;
+                return newObj;
+            });
+            break;
+         case "zip-code":
+            props.mainComponent.setState((state) => {
+                let newObj = Object.assign({}, state);
+                newObj[viewObjName].input.zipCode = event.target.value;
+                return newObj;
+            });
+            break;
+        case "mobile-phone":
+            props.mainComponent.setState((state) => {
+                let newObj = Object.assign({}, state);
+                newObj[viewObjName].input.mobilePhone = event.target.value;
+                return newObj;
+            });
+            break;
+        case "work-phone":
+            props.mainComponent.setState((state) => {
+                let newObj = Object.assign({}, state);
+                newObj[viewObjName].input.workPhone = event.target.value;
+                return newObj;
+            });
+            break;
+        case "other-phone":
+            props.mainComponent.setState((state) => {
+                let newObj = Object.assign({}, state);
+                newObj[viewObjName].input.otherPhone = event.target.value;
+                return newObj;
+            });
+            break;
+        case "email":
+            props.mainComponent.setState((state) => {
+                let newObj = Object.assign({}, state);
+                newObj[viewObjName].input.email = event.target.value;
+                return newObj;
+            });
+            break;
+        case "technicians":
+            props.mainComponent.setState((state) => {
+                let newObj = Object.assign({}, state);
+                newObj[viewObjName].input.technicians = event.target.value;
+                return newObj;
+            });
+            break;
+
+
+        }
+    }
+
+    (viewObjName === 'legacyCustomerImportView') ? handleSubmit = handleSubmitOfImport : (viewObjName === 'customerEditView') ? handleSubmit = handleSubmitOfEdit : (viewObjName === 'customerCreateView') ? handleSubmit = handleSubmitOfCreate : () => console.log("No submit handler exists for that view!");
+
+    function handleSubmitOfImport() {
+        props.mainComponent.dbRequest({
+                            reqID: "finishLegacyCustomerImport",
+                            ID: props.mainComponent.state[viewObjName].customerId,
+                            customerFirstName: props.mainComponent.state[viewObjName].input.customerFirstName,
+                            customerMiddleName: props.mainComponent.state[viewObjName].input.customerMiddleName,
+                            customerLastName: props.mainComponent.state[viewObjName].input.customerLastName,
+                            billingAddressLine1: props.mainComponent.state[viewObjName].input.billingAddressLine1,
+                            billingAddressLine2: props.mainComponent.state[viewObjName].input.billingAddressLine2,
+                            city: props.mainComponent.state[viewObjName].input.city,
+                            state: props.mainComponent.state[viewObjName].input.state,
+                            zipCode: props.mainComponent.state[viewObjName].input.zipCode,
+                            mobilePhone: props.mainComponent.state[viewObjName].input.mobilePhone,
+                            workPhone: props.mainComponent.state[viewObjName].input.workPhone,
+                            otherPhone: props.mainComponent.state[viewObjName].input.otherPhone,
+                            email: props.mainComponent.state[viewObjName].input.email
+                        },
+                        (responseObj) => {
+                            props.mainComponent.setState((state) => {
+                                let newObj = Object.assign({}, state)
+                                newObj.displaying = 'SearchCustomersView';
+                                console.log(newObj);
+
+
+
+                                return(newObj);
+                            }
+                        );
+        })
+    }
+
+    function handleSubmitOfEdit() {
+        props.mainComponent.dbRequest({
+                            reqID: "finishCustomerEdit",
+                            ID: props.mainComponent.state[viewObjName].customerId,
+                            customerFirstName: props.mainComponent.state[viewObjName].input.customerFirstName,
+                            customerMiddleName: props.mainComponent.state[viewObjName].input.customerMiddleName,
+                            customerLastName: props.mainComponent.state[viewObjName].input.customerLastName,
+                            billingAddressLine1: props.mainComponent.state[viewObjName].input.billingAddressLine1,
+                            billingAddressLine2: props.mainComponent.state[viewObjName].input.billingAddressLine2,
+                            city: props.mainComponent.state[viewObjName].input.city,
+                            state: props.mainComponent.state[viewObjName].input.state,
+                            zipCode: props.mainComponent.state[viewObjName].input.zipCode,
+                            mobilePhone: props.mainComponent.state[viewObjName].input.mobilePhone,
+                            workPhone: props.mainComponent.state[viewObjName].input.workPhone,
+                            otherPhone: props.mainComponent.state[viewObjName].input.otherPhone,
+                            email: props.mainComponent.state[viewObjName].input.email
+                        },
+                        (responseObj) => {
+                            props.mainComponent.setState((state) => {
+                                let newObj = Object.assign({}, state)
+                                newObj.displaying = 'SearchCustomersView';
+                                console.log(newObj);
+                                console.log('ribbet');
+
+
+
+                                return(newObj);
+                            }
+                        );
+        })
+    }
+
+    function handleSubmitOfCreate() {
+        props.mainComponent.dbRequest({
+                            reqID: "finishCustomerCreate",
+                            customerFirstName: props.mainComponent.state[viewObjName].input.customerFirstName,
+                            customerMiddleName: props.mainComponent.state[viewObjName].input.customerMiddleName,
+                            customerLastName: props.mainComponent.state[viewObjName].input.customerLastName,
+                            billingAddressLine1: props.mainComponent.state[viewObjName].input.billingAddressLine1,
+                            billingAddressLine2: props.mainComponent.state[viewObjName].input.billingAddressLine2,
+                            city: props.mainComponent.state[viewObjName].input.city,
+                            state: props.mainComponent.state[viewObjName].input.state,
+                            zipCode: props.mainComponent.state[viewObjName].input.zipCode,
+                            mobilePhone: props.mainComponent.state[viewObjName].input.mobilePhone,
+                            workPhone: props.mainComponent.state[viewObjName].input.workPhone,
+                            otherPhone: props.mainComponent.state[viewObjName].input.otherPhone,
+                            email: props.mainComponent.state[viewObjName].input.email
+                        },
+                        (responseObj) => {
+                            props.mainComponent.setState((state) => {
+                                let newObj = Object.assign({}, state)
+                                newObj.displaying = 'SearchCustomersView';
+                                console.log(newObj);
+
+
+
+                                return(newObj);
+                            }
+                        );
+        })
+    }
+
+
+
+    return(         <span>
+                    <span>{props.mainComponent.state.formAlert}</span>
+                    <div id="small-fields">
+                        <div id="small-fields-left-align">
+                        <div>
+                            <label htmlFor="customer-first-name">First Name</label>
+                            <input
+                                onChange={handleChange}
+                                id="customer-first-name"
+                                name="customer-first-name"
+                                type="text"
+                                value={props.mainComponent.state[viewObjName].input.customerFirstName}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="customer-middle-name">Middle Name</label>
+                            <input
+                                onChange={handleChange}
+                                id="customer-middle-name"
+                                name="customer-middle-name"
+                                type="text"
+                                value={props.mainComponent.state[viewObjName].input.customerMiddleName}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="customer-last-name">Last Name</label>
+                            <input
+                                onChange={handleChange}
+                                id="customer-last-name"
+                                name="customer-last-name"
+                                type="text"
+                                value={props.mainComponent.state[viewObjName].input.customerLastName}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="billing-address-line-1">Billing Address Line 1</label>
+                            <input
+                                onChange={handleChange}
+                                id="billing-address-line-1"
+                                name="billing-address-line-1"
+                                type="text"
+                                value={props.mainComponent.state[viewObjName].input.billingAddressLine1}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="city">Billing Address Line 2</label>
+                            <input
+                                onChange={handleChange}
+                                id="billing-address-line-2"
+                                name="billing-address-line-2"
+                                type="text"
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="city">City</label>
+                            <input
+                                onChange={handleChange}
+                                id="city"
+                                name="city"
+                                type="text"
+                                value={props.mainComponent.state[viewObjName].input.city}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="state">State</label>
+                            <select onChange={handleChange} value={ (() => {
+                                    switch (props.mainComponent.state[viewObjName].input.state) {
+                                        case 'AL':
+                                            return 'AL';
+                                            break;
+                                        case 'AK':
+                                            return 'AK';
+                                            break;
+                                        case 'AZ':
+                                            return 'AZ';
+                                            break;
+                                        case 'AR':
+                                            return 'AR';
+                                            break;
+                                        case 'CA':
+                                            return 'CA';
+                                            break;
+                                        case 'CO':
+                                            return 'CO';
+                                            break;
+                                        case 'CT':
+                                            return 'CT';
+                                            break;
+                                        case 'DE':
+                                            return 'DE';
+                                            break;
+                                        case 'DC':
+                                            return 'DC';
+                                            break;
+                                        case 'FL':
+                                            return 'FL';
+                                            break;
+                                        case 'GA':
+                                            return 'GA';
+                                            break;
+                                        case 'HI':
+                                            return 'HI';
+                                            break;
+                                        case 'ID':
+                                            return 'ID';
+                                            break;
+                                        case 'IL':
+                                            return 'IL';
+                                            break;
+                                        case 'IN':
+                                            return 'IN';
+                                            break;
+                                        case 'IA':
+                                            return 'IA';
+                                            break;
+                                        case 'KS':
+                                            return 'KS';
+                                            break;
+                                        case 'KY':
+                                            return 'KY';
+                                            break;
+                                        case 'LA':
+                                            return 'LA';
+                                            break;
+                                        case 'ME':
+                                            return 'ME';
+                                            break;
+                                        case 'MD':
+                                            return 'MD';
+                                            break;
+                                        case 'MA':
+                                            return 'MA';
+                                            break;
+                                        case 'MI':
+                                            return 'MI';
+                                            break;
+                                        case 'MN':
+                                            return 'MN';
+                                            break;
+                                        case 'MS':
+                                            return 'MS';
+                                            break;
+                                        case 'MO':
+                                            return 'MO';
+                                            break;
+                                        case 'MT':
+                                            return 'MT';
+                                            break;
+                                        case 'NE':
+                                            return 'NE';
+                                            break;
+                                        case 'NV':
+                                            return 'NV';
+                                            break;
+                                        case 'NH':
+                                            return 'NH';
+                                            break;
+                                        case 'NJ':
+                                            return 'NJ';
+                                            break;
+                                        case 'NM':
+                                            return 'NM';
+                                            break;
+                                        case 'NY':
+                                            return 'NY';
+                                            break;
+                                        case 'NC':
+                                            return 'NC';
+                                            break;
+                                        case 'ND':
+                                            return 'ND';
+                                            break;
+                                        case 'OH':
+                                            return 'OH';
+                                            break;
+                                        case 'OK':
+                                            return 'OK';
+                                            break;
+                                        case 'OR':
+                                            return 'OR';
+                                            break;
+                                        case 'PA':
+                                            return 'PA';
+                                            break;
+                                        case 'RI':
+                                            return 'RI';
+                                            break;
+                                        case 'SC':
+                                            return 'SC';
+                                            break;
+                                        case 'SD':
+                                            return 'SD';
+                                            break;
+                                        case 'TN':
+                                            return 'TN';
+                                            break;
+                                        case 'TX':
+                                            return 'TX';
+                                            break;
+                                        case 'UT':
+                                            return 'UT';
+                                            break;
+                                        case 'VT':
+                                            return 'VT';
+                                            break;
+                                        case 'VA':
+                                            return 'VA';
+                                            break;
+                                        case 'WA':
+                                            return 'WA';
+                                            break;
+                                        case 'WV':
+                                            return 'WV';
+                                            break;
+                                        case 'WI':
+                                            return 'WI';
+                                            break;
+                                        case 'WY':
+                                            return 'WY';
+                                            break;
+                                        default:
+                                            return 'KS';
+                                    }
+                                })()
+                                                                   }
+                                id="state"
+                                name="state">
+                                <option value="AL">Alabama</option>
+                                <option value="AK">Alaska</option>
+                                <option value="AZ">Arizona</option>
+                                <option value="AR">Arkansas</option>
+                                <option value="CA">California</option>
+                                <option value="CO">Colorado</option>
+                                <option value="CT">Connecticut</option>
+                                <option value="DE">Delaware</option>
+                                <option value="DC">District Of Columbia</option>
+                                <option value="FL">Florida</option>
+                                <option value="GA">Georgia</option>
+                                <option value="HI">Hawaii</option>
+                                <option value="ID">Idaho</option>
+                                <option value="IL">Illinois</option>
+                                <option value="IN">Indiana</option>
+                                <option value="IA">Iowa</option>
+                                <option value="KS" >Kansas</option>
+                                <option value="KY">Kentucky</option>
+                                <option value="LA">Louisiana</option>
+                                <option value="ME">Maine</option>
+                                <option value="MD">Maryland</option>
+                                <option value="MA">Massachusetts</option>
+                                <option value="MI">Michigan</option>
+                                <option value="MN">Minnesota</option>
+                                <option value="MS">Mississippi</option>
+                                <option value="MO">Missouri</option>
+                                <option value="MT">Montana</option>
+                                <option value="NE">Nebraska</option>
+                                <option value="NV">Nevada</option>
+                                <option value="NH">New Hampshire</option>
+                                <option value="NJ">New Jersey</option>
+                                <option value="NM">New Mexico</option>
+                                <option value="NY">New York</option>
+                                <option value="NC">North Carolina</option>
+                                <option value="ND">North Dakota</option>
+                                <option value="OH">Ohio</option>
+                                <option value="OK">Oklahoma</option>
+                                <option value="OR">Oregon</option>
+                                <option value="PA">Pennsylvania</option>
+                                <option value="RI">Rhode Island</option>
+                                <option value="SC">South Carolina</option>
+                                <option value="SD">South Dakota</option>
+                                <option value="TN">Tennessee</option>
+                                <option value="TX">Texas</option>
+                                <option value="UT">Utah</option>
+                                <option value="VT">Vermont</option>
+                                <option value="VA">Virginia</option>
+                                <option value="WA">Washington</option>
+                                <option value="WV">West Virginia</option>
+                                <option value="WI">Wisconsin</option>
+                                <option value="WY">Wyoming</option>
+                            </select>
+
+                        </div>
+                        <div>
+                            <label htmlFor="zip-code">Zip Code</label>
+                            <input
+                                onChange={handleChange}
+                                id="zip-code"
+                                name="zip-code"
+                                type="text"
+                                value={props.mainComponent.state[viewObjName].input.zipCode}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="mobile-phone">Mobile Phone</label>
+                            <input
+                                onChange={handleChange}
+                                id="mobile-phone"
+                                name="mobile-phone"
+                                type="tel"
+                                value={props.mainComponent.state[viewObjName].input.mobilePhone}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="work-phone">Work Phone</label>
+                            <input
+                                onChange={handleChange}
+                                id="work-phone"
+                                name="work-phone"
+                                type="tel"
+                                value={props.mainComponent.state[viewObjName].input.workPhone}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="other-phone">Other Phone</label>
+                            <input
+                                onChange={handleChange}
+                                id="other-phone"
+                                name="other-phone"
+                                type="tel"
+                                value={props.mainComponent.state[viewObjName].input.otherPhone}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="email">Email</label>
+                            <input
+                                onChange={handleChange}
+                                id="email"
+                                name="email"
+                                type="email"
+                                value={props.mainComponent.state[viewObjName].input.email}
+                            />
+                        </div>
+                     </div>
+                    </div>
+
+                    <button
+                        style={{
+                            marginTop: "1.5em",
+                            lineHeight: ".5em"
+                        }}
+                        type="button"
+                        onClick={handleSubmit}
+                    >
+                        <h2> Save </h2>
+                    </button>
+                </span>
+            );
+
+
+}
+
+
+function CustomerNoteView(props) {
+    let returnArr = props.noteArr.map((element) => <Note noteObj={element}/> );
+    let customerId = props.mainComponent.state.customerNoteView.customerId;
+    return (
+        <div>
+            <div id="notes">{returnArr}</div>
+            <textarea id="new-note-textarea" onChange={(event) => {
+                    props.mainComponent.setState((state) => {
+                        let newObj = Object.assign({}, state.customerNoteView);
+                        newObj.input.newNoteDraft = event.target.value;
+                        return(newObj);
+                    })}}
+                value={props.mainComponent.state.customerNoteView.input.newNoteDraft}/>
+            <button type="button" onClick={() => props.mainComponent.dbRequest(
+                        {
+                            reqID: "addNote",
+                            ID: props.mainComponent.state.customerNoteView.customerId,
+                            newNote: props.mainComponent.state.customerNoteView.input.newNoteDraft
+                        }, (responseObj) => {
+                            props.mainComponent.setState((state) => {
+                                let newObj = Object.assign({}, state.customerNoteView);
+                                newObj.input.newNoteDraft = "";
+                                return(newObj);
+                            })
+                            props.mainComponent.viewNotes(customerId);
+                        })
+                    }>Add note</button>
+        </div>
+
+    )
+}
+
+function Note(props) {
+
+
+        return (
+            <div className="note">{props.noteObj.timeStamp} <br />
+                {props.noteObj.noteContent} <button type="button" onClick={() => null}>Delete</button></div>
+        )
+    }
+
+
+
+function ScheduleServiceCallView(props) {
+
+}
+
+
+
+
+ReactDOM.render(
+    <Outgo
+        schedule={scheduleObj}
+        style={{
+            fontFamily: "sans-serif",
+            display: "flex",
+            alignItems: "center",
+            flexDirection: "column"
+        }}
+    />,
+    document.getElementById("react-root")
+);

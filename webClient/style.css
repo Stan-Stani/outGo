@@ -1,0 +1,101 @@
+html {
+    background-color: #deb986;
+    font-family: sans-serif;
+}
+
+body {
+    position: relative;
+}
+
+label {
+    font-weight: bold;
+}
+
+textarea {
+    height: 10em;
+    width: 600px;
+}
+
+#notes {
+    text-align: left;
+}
+
+.note {
+    margin-top: 1em;
+}
+
+.no-margin {
+    padding: 0;
+}
+
+.space-between {
+    display: flex;
+    justify-content: space-between
+}
+
+.selectable-customer {
+    border: 1px black solid;
+    margin: 3px 0;
+}
+
+#react-root {
+    text-align: center;
+}
+
+#center-panel {
+    display: inline-flex;
+    align-items: center;
+    flex-direction: column;
+    padding: 5px;
+    background-color: #c0df85;
+    border-radius: 25px;
+}
+
+#first-and-last-name-fields{
+    text-align: right;
+}
+
+#first-and-last-name-fields input {
+    margin-left: 1em;
+    margin-top: 5px;
+}
+
+#small-fields {
+    display: flex;
+}
+
+#small-fields-left-align {
+    text-align: right;
+    
+}
+
+#small-fields input, select {
+    margin-left: 1em;
+    margin-top: 5px;
+}
+
+
+
+@media screen and (max-width: 600px) {
+    textarea {
+        width: 95%;
+    }
+
+    #form {
+        width: 95%;
+    }
+
+    .small-fields {
+        text-align: left;
+    }
+
+    label {
+        display: block;
+        margin-top: 20px;
+    }
+
+    .small-fields input {
+        margin-top: 5px;
+        margin-left: 0;
+    }
+}
