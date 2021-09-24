@@ -310,7 +310,32 @@ app.post('/', function(req, res){
 
        break;
 
+    case 'viewWorkOrders':
+      var sql = `SELECT *
+           FROM workOrders
+           WHERE customerId = ?;`
+      var customerId = clientJSON.ID;
 
+
+
+
+
+      db.each(sql, [customerId], (err, row) => {
+        if (err) {
+          console.error(err.message);
+        }
+        row
+          ? sqliteResponseArr.push(row)
+          : sqliteResponseArr.push(`no match`)
+        // completion call back
+      }, () => {
+        console.log(sqliteResponseArr);
+        res.send(sqliteResponseArr);
+        sqliteResponseArr = [];
+      });
+
+
+      break;
 
     case 'viewLegacyData':
 

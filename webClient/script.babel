@@ -795,9 +795,9 @@ function SelectableCustomer(props) {
                           <button type="button" onClick={handleEditClick} >
                             Edit
                     </button>
-                    <button type="button" onClick={handleManageServiceCallsClick} >
+                    <button type="button" onClick={viewWorkOrdersClick} >
 
-                            Manage Service Calls
+                            Work Orders
                     </button>
                     <button type="button" onClick={handleNotesClick} >
 
@@ -890,13 +890,13 @@ function SelectableCustomer(props) {
            );
     }
 
-    function handleManageServiceCallsClick(event) {
+    function viewWorkOrdersClick(event) {
 
         props.mainComponent.dbRequest({
-                            reqID: "customerSelect",
+                            reqID: "viewWorkOrders",
                             ID: props.customer.customerId
-                        },
-                        console.log
+                        }, console.log
+
                     );
     }
 
