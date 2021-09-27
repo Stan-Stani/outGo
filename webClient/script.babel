@@ -276,6 +276,7 @@ class Outgo extends React.Component {
                     newNoteDraft: ""
                 }
             },
+            workOrdersView: [],
             formAlert: ""
         };
         this.handleChange = this.handleChange.bind(this);
@@ -599,6 +600,10 @@ class Outgo extends React.Component {
                 return(<div><CustomerNoteView mainComponent={this} noteArr={this.state.customerNoteView.noteArray} />{follower}</div>)
                 break;
 
+            case 'WorkOrdersView':
+                return(<div><WorkOrdersView mainComponent={this} />{follower}</div>)
+                break;
+
 
         }
     }
@@ -895,8 +900,7 @@ function SelectableCustomer(props) {
         props.mainComponent.dbRequest({
                             reqID: "viewWorkOrders",
                             ID: props.customer.customerId
-                        }, console.log
-
+                        }, (responseObj) => props.mainComponent.setState({displaying: 'WorkOrdersView', workOrdersView: responseObj})
                     );
     }
 
@@ -1016,6 +1020,7 @@ function CustomerView(props) {
 
         }
     }
+    var handleSubmit;
 
     (viewObjName === 'legacyCustomerImportView') ? handleSubmit = handleSubmitOfImport : (viewObjName === 'customerEditView') ? handleSubmit = handleSubmitOfEdit : (viewObjName === 'customerCreateView') ? handleSubmit = handleSubmitOfCreate : () => console.log("No submit handler exists for that view!");
 
@@ -1508,8 +1513,20 @@ function Note(props) {
 
 
 
-function ScheduleServiceCallView(props) {
+function WorkOrdersView(props) {
+    let workOrderList = props.mainComponent.state.workOrdersView.map((element) => <div><ul>
+        <li>{element.date}</li>
+        <li>{element.scheduledStartTime}</li>
+        <li>{element.actualStartTime}</li>
+    </ul></div>)
 
+
+    return(
+        <div>
+            {workOrderList}
+            <button type="button">New Work Order</button>
+        </div>
+    )
 }
 
 
