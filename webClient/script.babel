@@ -191,6 +191,15 @@ let scheduleObj = {
     phone: "620-431-3820",
     email: "publiclibrary@chanute.org"
 };
+
+function OutGoRefactor() {
+    const [displaying, setDisplaying] = useState('SearchCustomersView');
+    // create separate hook variables for each view
+    const [searchCustomersView, setSearchCustomersView] = useState({
+        input: {}
+    })
+}
+
 class Outgo extends React.Component {
     constructor(props) {
         super(props);
