@@ -1,6 +1,6 @@
 /*
 TODO:
-* get view notes working again after this refactor
+* timezone settings
 * create warning making sure the user checks the fields to be imported from legacyCustomer and corrects any arrows,
 perhaps with arrows by really important / likely to be wrong fields like mobile number, state, line 2 of address, middle name AND prompting them to look at paper file for other information if necessary as the legacy customer info is probably out of date anyways. Maybe change it to require user to confirm each field is correct via a check box before the save / submit button will work.
 * add logic to node for updating customer after submitting from customerEditView
@@ -314,6 +314,8 @@ function OutGoRefactor(props) {
         }
     };
 
+
+
     function handleSubmit() {
         if (
             this.state.input.appointmentDate &&
@@ -452,6 +454,22 @@ function GoHome(props) {
 
 }
 
+function viewNotes(customerId, state) {
+        dbRequest({
+                            reqID: "beginViewCustomerNotes",
+                            ID: customerId
+                        },
+                        (responseObj) => {
+            console.log(responseObj);
+            let newObj = Object.assign({}, state.read.customerNoteView);
+            newObj.noteArray = responseObj;
+            newObj.customerId = customerId;
+            state.set.displaying('CustomerNoteView');
+            state.set.customerNoteView(newObj);
+        }
+                    );
+}
+
 function SearchCustomersView(props) {
 
     function buildNameDatalists(resObj) {
@@ -522,6 +540,8 @@ function SearchCustomersView(props) {
                 break;
         }
     }
+
+
 
 
     function handleSearch() {
@@ -603,7 +623,7 @@ function SearchCustomersView(props) {
                 )
 
 
-            }
+}
 
 
 
@@ -652,22 +672,11 @@ function SearchCustomersView(props) {
 
             }
 
+
+
             function SelectableCustomer(props) {
 
-                function viewNotes(customerId) {
-                        dbRequest({
-                                            reqID: "beginViewCustomerNotes",
-                                            ID: customerId
-                                        },
-                                        (responseObj) => {
-                            console.log(responseObj);
-                            this.setState((state) => {  let newObj = Object.assign({}, state.customerNoteView);
-                                newObj.noteArray = responseObj;
-                                newObj.customerId = customerId;
-                                return({displaying: 'CustomerNoteView', customerNoteView: newObj})})
-                        }
-                                    );
-                }
+
 
                 function handleImportClick(event) {
 
@@ -710,8 +719,8 @@ function SearchCustomersView(props) {
                             props.state.set.displaying('LegacyDataView');
 
 
-                })
-            }
+                            })
+                }
 
                 function handleEditClick(event) {
 
@@ -760,7 +769,7 @@ function SearchCustomersView(props) {
 
                 function handleNotesClick(event) {
                     let customerId = props.customer.customerId;
-                    viewNotes(customerId);
+                    viewNotes(customerId, props.state);
 
                 }
 
@@ -1363,28 +1372,28 @@ function SearchCustomersView(props) {
 
             function CustomerNoteView(props) {
                 let returnArr = props.noteArr.map((element) => <Note noteObj={element}/> );
-                let customerId = customerNoteView.customerId;
+                let customerId = props.state.read.customerNoteView.customerId;
                 return (
                     <div>
                         <div id="notes">{returnArr}</div>
                         <textarea id="new-note-textarea" onChange={(event) => {
-                                    let newObj = Object.assign({}, customerNoteView);
+                                    let newObj = Object.assign({}, props.state.read.customerNoteView);
                                     newObj.input.newNoteDraft = event.target.value;
                                     props.state.set.customerNoteView(newObj);
                                 }}
-                            value={customerNoteView.input.newNoteDraft}/>
+                            value={props.state.read.customerNoteView.input.newNoteDraft}/>
                         <button type="button" onClick={() => dbRequest(
                                     {
                                         reqID: "addNote",
-                                        ID: customerNoteView.customerId,
-                                        newNote: customerNoteView.input.newNoteDraft
+                                        ID: props.state.read.customerNoteView.customerId,
+                                        newNote: props.state.read.customerNoteView.input.newNoteDraft
                                     }, (responseObj) => {{
 
-                                            let newObj = Object.assign({}, customerNoteView);
+                                            let newObj = Object.assign({}, props.state.read.customerNoteView);
                                             newObj.input.newNoteDraft = "";
                                             props.state.set.customerNoteView(newObj);
                                         }
-                                        viewNotes(customerId);
+                                        viewNotes(customerId, props.state);
                                     })
                                 }>Add note</button>
                     </div>
